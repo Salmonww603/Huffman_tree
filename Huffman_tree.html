@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>哈夫曼树构建可视化 · 粒子融合版 + WPL详解 + 虚线分层</title>
+    <style>
+        :root {
+            --bg: #f9f7f4;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-light: #475569;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --gold: #f59e0b;
+            --gold-glow: #fbbf24;
+            --green: #10b981;
+            --green-glow: #34d399;
+            --purple: #8b5cf6;
+            --danger: #ef4444;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: #f1f5f9;
+            background-image: radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 50%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1100px;
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            padding: 24px 28px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(2px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2px;
+        }
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.4px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            font-weight: 500;
+            letter-spacing: 0.2px;
+        }
+
+        .input-section {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            background: #f8fafc;
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+        }
+        .input-section label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text);
+            white-space: nowrap;
+        }
+        .input-section input {
+            flex: 1;
+            min-width: 240px;
+            padding: 10px 14px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+            color: var(--text);
+            background: #fff;
+            transition: var(--transition);
+            letter-spacing: 0.3px;
+        }
+        .input-section input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            letter-spacing: 0.3px;
+            transition: var(--transition);
+            white-space: nowrap;
+            user-select: none;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 4px 6px rgba(99, 102, 241, 0.3);
+        }
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            box-shadow: 0 6px 12px rgba(99, 102, 241, 0.35);
+            transform: translateY(-1px);
+        }
+        .btn-outline {
+            background: #fff;
+            color: var(--text);
+            border: 2px solid var(--border);
+        }
+        .btn-outline:hover {
+            border-color: #cbd5e1;
+            background: #fdfdfd;
+        }
+        .btn-outline:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        .btn-reset {
+            background: #fff;
+            color: var(--danger);
+            border: 2px solid #fecaca;
+        }
+        .btn-reset:hover {
+            background: #fef2f2;
+            border-color: #ef4444;
+        }
+        .btn-auto {
+            background: #fff;
+            color: #10b981;
+            border: 2px solid #a7f3d0;
+        }
+        .btn-auto:hover {
+            background: #f0fdf4;
+            border-color: #10b981;
+        }
+        .btn-auto.playing {
+            background: #fffbeb;
+            color: #f59e0b;
+            border-color: #fcd34d;
+            animation: subtle-pulse 1.6s ease-in-out infinite;
+        }
+        @keyframes subtle-pulse {
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.25);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+            }
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            background: #fdfdfd;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            min-height: 460px;
+            display: flex;
+            box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.02);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            cursor: pointer;
+        }
+
+        .info-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+            font-size: 0.88rem;
+            color: var(--text);
+            min-height: 28px;
+        }
+        .info-bar .step-indicator {
+            font-weight: 700;
+            background: #f1f5f9;
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            letter-spacing: 0.3px;
+        }
+        .info-bar .step-desc {
+            color: var(--text-light);
+            flex: 1;
+            text-align: center;
+            min-width: 220px;
+            letter-spacing: 0.2px;
+            line-height: 1.4;
+        }
+
+        .legend {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+            justify-content: center;
+            font-size: 0.76rem;
+            color: var(--text-light);
+            letter-spacing: 0.2px;
+        }
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .legend .dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .legend .dot.leaf {
+            background: #60a5fa;
+        }
+        .legend .dot.internal {
+            background: #a78bfa;
+        }
+        .legend .dot.selected {
+            background: #fbbf24;
+            box-shadow: 0 0 8px #fbbf24;
+        }
+        .legend .dot.merged {
+            background: #34d399;
+            box-shadow: 0 0 8px #34d399;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b;
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 24px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            z-index: 999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.35s ease, transform 0.35s ease;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        .toast.hide {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-12px);
+        }
+
+        @media (max-width: 720px) {
+            .container {
+                padding: 14px 10px 12px;
+                gap: 10px;
+            }
+            .header h1 {
+                font-size: 1.4rem;
+            }
+            .input-section {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .canvas-wrapper {
+                min-height: 340px;
+            }
+            .btn {
+                font-size: 0.8rem;
+                padding: 8px 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌳 哈夫曼树 · 粒子融合 + WPL详解 + 虚线分层</h1>
+            <p class="subtitle">贪心合并最小权值 · 左右双重视角 · 深度一目了然</p>
+        </div>
+
+        <div class="input-section">
+            <label for="inputData">📝 数据</label>
+            <input type="text" id="inputData" placeholder="例如: a:5, b:9, c:12, d:13, e:16, f:45"
+            value="a:5, b:9, c:12, d:13, e:16, f:45" spellcheck="false" autocomplete="off" />
+            <button class="btn btn-primary" id="btnParse">🔍 解析</button>
+            <button class="btn btn-reset" id="btnReset">↺ 重置</button>
+        </div>
+
+        <div class="canvas-wrapper" id="canvasWrapper">
+            <canvas id="mainCanvas"></canvas>
+        </div>
+
+        <div class="info-bar">
+            <span class="step-indicator" id="stepIndicator">步骤 0/0</span>
+            <span class="step-desc" id="stepDesc">👆 输入数据并点击“解析”开始</span>
+        </div>
+
+        <div class="legend">
+            <span><span class="dot leaf"></span> 叶子节点</span>
+            <span><span class="dot internal"></span> 内部节点</span>
+            <span><span class="dot selected"></span> 被选中合并</span>
+            <span><span class="dot merged"></span> 新合并节点</span>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-outline" id="btnPrev" disabled>◀ 上一步</button>
+            <button class="btn btn-outline" id="btnNext" disabled>下一步 ▶</button>
+            <button class="btn btn-auto" id="btnAuto" disabled>▶ 自动播放</button>
+        </div>
+    </div>
+
+    <div class="toast hide" id="toast"></div>
+
+    <script>
+        (function() {
+            // ---------- DOM 引用 ----------
+            const inputEl = document.getElementById('inputData');
+            const btnParse = document.getElementById('btnParse');
+            const btnReset = document.getElementById('btnReset');
+            const btnPrev = document.getElementById('btnPrev');
+            const btnNext = document.getElementById('btnNext');
+            const btnAuto = document.getElementById('btnAuto');
+            const canvas = document.getElementById('mainCanvas');
+            const canvasWrapper = document.getElementById('canvasWrapper');
+            const stepIndicator = document.getElementById('stepIndicator');
+            const stepDesc = document.getElementById('stepDesc');
+            const toastEl = document.getElementById('toast');
+            const ctx = canvas.getContext('2d');
+
+            // ---------- 状态变量 ----------
+            let allSteps = [];
+            let currentStepIndex = 0;
+            let isAutoPlaying = false;
+            let autoPlayTimer = null;
+            let toastTimer = null;
+
+            let isRightAnimating = false;
+            let animationProgress = 1.0;
+            let animationStartTime = 0;
+            const ANIMATION_DURATION = 750;
+            let animationFromForest = null;
+            let animationToForest = null;
+            let animationTargetStep = -1;
+            let particles = [];
+
+            let renderFrameId = null;
+            let lastFrameTime = 0;
+
+            function showToast(msg, duration = 2200) {
+                if (toastTimer) clearTimeout(toastTimer);
+                toastEl.textContent = msg;
+                toastEl.classList.remove('hide');
+                toastEl.classList.add('show');
+                toastTimer = setTimeout(() => {
+                    toastEl.classList.add('hide');
+                    toastEl.classList.remove('show');
+                    toastTimer = null;
+                }, duration);
+            }
+
+            class Node {
+                constructor(char, weight, left = null, right = null) {
+                    this.char = char;
+                    this.weight = weight;
+                    this.left = left;
+                    this.right = right;
+                    this.id = Node._nextId++;
+                    this.isLeaf = () => left === null && right === null;
+                }
+            }
+            Node._nextId = 1;
+
+            function parseInput(raw) {
+                const cleaned = raw.replace(/[\n\r;]+/g, ',');
+                const parts = cleaned.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                if (parts.length === 0) throw new Error('输入为空');
+                const entries = [];
+                for (const part of parts) {
+                    const match = part.match(/^(.+?)[:=]\s*(\d+(?:\.\d+)?)$/);
+                    if (!match) throw new Error(`无法解析 "${part}"，格式如 a:5`);
+                    const char = match[1].trim();
+                    const weight = parseFloat(match[2]);
+                    if (isNaN(weight) || weight <= 0) throw new Error(`频率必须为正数："${part}"`);
+                    if (char.length === 0) throw new Error(`字符不能为空："${part}"`);
+                    entries.push({ char, weight });
+                }
+                if (entries.length < 2) throw new Error('至少需要2个节点');
+                return entries;
+            }
+
+            function buildHuffmanSteps(entries) {
+                let leaves = entries.map(e => new Node(e.char, e.weight));
+                leaves.sort((a, b) => (a.weight !== b.weight ? a.weight - b.weight : (a.char || '').localeCompare(b
+                .char || '')));
+                const steps = [];
+                const forest = [...leaves];
+                const initialBefore = [...forest].sort((a, b) => a.weight - b.weight || a.id - b.id);
+                steps.push({
+                    beforeForest: initialBefore,
+                    afterForest: initialBefore,
+                    selectedNodes: [],
+                    newNodes: [],
+                    description: `初始状态：${forest.length}个叶子节点，权值 [${initialBefore.map(n=>n.weight).join(', ')}]`,
+                });
+
+                while (forest.length > 1) {
+                    forest.sort((a, b) => a.weight - b.weight || a.id - b.id);
+                    const beforeForest = [...forest];
+                    const left = forest.shift();
+                    const right = forest.shift();
+                    const newNode = new Node(null, left.weight + right.weight, left, right);
+                    forest.push(newNode);
+                    const afterForest = [...forest].sort((a, b) => a.weight - b.weight || a.id - b.id);
+                    steps.push({
+                        beforeForest: beforeForest,
+                        afterForest: afterForest,
+                        selectedNodes: [left, right],
+                        newNodes: [newNode],
+                        description: `选中 ${left.char ? '"'+left.char+'"' : '内部'}(${left.weight}) 和 ${right.char ? '"'+right.char+'"' : '内部'}(${right.weight}) → 合并新节点(${newNode.weight})`,
+                    });
+                }
+                return steps;
+            }
+
+            function computeWPL(root) {
+                if (!root) return { total: 0, details: [] };
+                const details = [];
+                function dfs(node, depth) {
+                    if (!node) return;
+                    if (node.isLeaf()) {
+                        const product = node.weight * depth;
+                        details.push({ char: node.char, weight: node.weight, depth, product });
+                    } else {
+                        dfs(node.left, depth + 1);
+                        dfs(node.right, depth + 1);
+                    }
+                }
+                dfs(root, 0);
+                const total = details.reduce((sum, d) => sum + d.product, 0);
+                return { total, details };
+            }
+
+            function computeTreeLayout(forest, canvasWidth, canvasHeight, regionWidth) {
+                const marginX = 30;
+                const marginTop = 40;
+                const marginBottom = 30;
+                const availableWidth = regionWidth - 2 * marginX;
+                const availableHeight = canvasHeight - marginTop - marginBottom;
+                const levelHeight = 68;
+                const leafSpacing = 44;
+                const allNodes = new Set();
+                const edges = [];
+                function collect(node) {
+                    if (!node || allNodes.has(node)) return;
+                    allNodes.add(node);
+                    if (node.left) { edges.push([node, node.left]);
+                        collect(node.left); }
+                    if (node.right) { edges.push([node, node.right]);
+                        collect(node.right); }
+                }
+                forest.forEach(root => collect(root));
+                function leafCount(node) {
+                    if (node.isLeaf()) return 1;
+                    return (node.left ? leafCount(node.left) : 0) + (node.right ? leafCount(node.right) : 0);
+                }
+                const rootLeafCounts = forest.map(root => leafCount(root));
+                const totalLeaves = rootLeafCounts.reduce((a, b) => a + b, 0);
+                const totalWidthNeeded = totalLeaves * leafSpacing;
+                const scaleX = Math.min(1, availableWidth / Math.max(totalWidthNeeded, 1));
+                const actualLeafSpacing = leafSpacing * scaleX;
+                const totalActualWidth = totalLeaves * actualLeafSpacing;
+                const startX = marginX + (availableWidth - totalActualWidth) / 2;
+                const rootRanges = [];
+                let cursorX = startX;
+                for (let i = 0; i < forest.length; i++) {
+                    const w = rootLeafCounts[i] * actualLeafSpacing;
+                    rootRanges.push({ left: cursorX, right: cursorX + w, center: cursorX + w / 2 });
+                    cursorX += w;
+                }
+                function maxDepth(node) {
+                    if (!node || node.isLeaf()) return 0;
+                    return 1 + Math.max(maxDepth(node.left), maxDepth(node.right));
+                }
+                const maxD = Math.max(...forest.map(r => maxDepth(r)), 1);
+                const totalHeightNeeded = maxD * levelHeight;
+                const scaleY = Math.min(1, availableHeight / Math.max(totalHeightNeeded, 1));
+                const actualLevelHeight = levelHeight * scaleY;
+                const positions = new Map();
+                function assignPosition(node, rangeLeft, rangeRight, depth) {
+                    if (!node) return;
+                    const cx = (rangeLeft + rangeRight) / 2;
+                    const cy = marginTop + depth * actualLevelHeight;
+                    positions.set(node, { x: cx, y: cy });
+                    if (node.isLeaf()) return;
+                    const mid = (rangeLeft + rangeRight) / 2;
+                    if (node.left && node.right) {
+                        const leftCount = leafCount(node.left);
+                        const rightCount = leafCount(node.right);
+                        const total = leftCount + rightCount;
+                        assignPosition(node.left, rangeLeft, rangeLeft + (rangeRight - rangeLeft) * (leftCount / total),
+                            depth + 1);
+                        assignPosition(node.right, rangeLeft + (rangeRight - rangeLeft) * (leftCount / total), rangeRight,
+                            depth + 1);
+                    } else if (node.left) {
+                        assignPosition(node.left, rangeLeft, rangeRight, depth + 1);
+                    } else if (node.right) {
+                        assignPosition(node.right, rangeLeft, rangeRight, depth + 1);
+                    }
+                }
+                for (let i = 0; i < forest.length; i++) {
+                    assignPosition(forest[i], rootRanges[i].left, rootRanges[i].right, 0);
+                }
+                return { positions, edges, allNodes, maxDepth: maxD, actualLevelHeight, marginTop };
+            }
+
+            class Particle {
+                constructor(x, y, color) {
+                    this.x = x;
+                    this.y = y;
+                    this.vx = (Math.random() - 0.5) * 180;
+                    this.vy = (Math.random() - 0.5) * 180 - 40;
+                    this.life = 0.6 + Math.random() * 0.7;
+                    this.maxLife = this.life;
+                    this.color = color;
+                    this.size = 2.5 + Math.random() * 4;
+                }
+                update(dt) {
+                    this.x += this.vx * dt;
+                    this.y += this.vy * dt;
+                    this.vy += 120 * dt;
+                    this.life -= dt;
+                }
+                draw(ctx) {
+                    const alpha = Math.max(0, this.life / this.maxLife);
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = this.color;
+                    ctx.shadowColor = this.color;
+                    ctx.shadowBlur = 8;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size * alpha, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+                isDead() { return this.life <= 0; }
+            }
+
+            function spawnParticles(x, y, count, colors) {
+                for (let i = 0; i < count; i++) {
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    particles.push(new Particle(x, y, color));
+                }
+            }
+
+            function getNodeRadius(node) {
+                const base = node.isLeaf() ? 19 : 21;
+                const scale = Math.log2(node.weight + 1) * 2.8;
+                return Math.min(Math.max(base + scale, 17), 46);
+            }
+
+            function renderAll(timestamp) {
+                if (allSteps.length === 0) return;
+                const rect = canvas.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+                const displayWidth = rect.width;
+                const displayHeight = Math.max(rect.height, 460);
+                canvas.width = displayWidth * dpr;
+                canvas.height = displayHeight * dpr;
+                canvas.style.width = displayWidth + 'px';
+                canvas.style.height = displayHeight + 'px';
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.scale(dpr, dpr);
+                const W = displayWidth;
+                const H = displayHeight;
+                ctx.clearRect(0, 0, W, H);
+                ctx.fillStyle = '#fdfdfd';
+                ctx.fillRect(0, 0, W, H);
+
+                const splitX = W * 0.56;
+                ctx.save();
+                ctx.strokeStyle = '#e2e8f0';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([6, 6]);
+                ctx.beginPath();
+                ctx.moveTo(splitX, 20);
+                ctx.lineTo(splitX, H - 20);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+
+                const leftWidth = splitX;
+                const step = allSteps[currentStepIndex];
+                const leftForest = step.afterForest;
+                renderLeftTree(leftForest, 0, 0, leftWidth, H, timestamp);
+
+                const rightX = splitX + 10;
+                const rightWidth = W - rightX - 10;
+                let rightForest;
+                if (isRightAnimating && animationFromForest && animationToForest) {
+                    rightForest = animationToForest;
+                } else {
+                    rightForest = step.afterForest;
+                }
+                renderRightAnimation(rightForest, rightX, 0, rightWidth, H, timestamp, step);
+
+                if (particles.length > 0) {
+                    const dt = Math.min(0.05, (timestamp - lastFrameTime) / 1000);
+                    particles.forEach(p => p.update(dt));
+                    particles = particles.filter(p => !p.isDead());
+                    particles.forEach(p => p.draw(ctx));
+                }
+                lastFrameTime = timestamp;
+            }
+
+            function renderLeftTree(forest, offsetX, offsetY, regionWidth, regionHeight, timestamp) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(offsetX, offsetY, regionWidth, regionHeight);
+                ctx.clip();
+
+                const layout = computeTreeLayout(forest, regionWidth, regionHeight, regionWidth);
+                const { positions, edges, allNodes, maxDepth, actualLevelHeight, marginTop } = layout;
+                if (allNodes.size === 0) { ctx.restore(); return; }
+
+                // ---------- 绘制虚线分层 ----------
+                ctx.save();
+                ctx.strokeStyle = '#cbd5e1';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([6, 6]);
+                for (let d = 0; d <= maxDepth; d++) {
+                    const y = marginTop + d * actualLevelHeight;
+                    ctx.beginPath();
+                    ctx.moveTo(offsetX + 10, y);
+                    ctx.lineTo(offsetX + regionWidth - 10, y);
+                    ctx.stroke();
+                }
+                ctx.setLineDash([]);
+                ctx.restore();
+
+                // 绘制边
+                const drawnEdges = new Set();
+                edges.forEach(([parent, child]) => {
+                    const key = parent.id + '_' + child.id;
+                    if (drawnEdges.has(key)) return;
+                    drawnEdges.add(key);
+                    const pp = positions.get(parent);
+                    const cp = positions.get(child);
+                    if (!pp || !cp) return;
+                    const pr = getNodeRadius(parent);
+                    const cr = getNodeRadius(child);
+                    const dx = cp.x - pp.x;
+                    const dy = cp.y - pp.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 1) return;
+                    const nx = dx / dist,
+                        ny = dy / dist;
+                    ctx.beginPath();
+                    ctx.moveTo(pp.x + nx * pr, pp.y + ny * pr);
+                    ctx.quadraticCurveTo((pp.x + cp.x) / 2, (pp.y + cp.y) / 2, cp.x - nx * cr, cp.y - ny * cr);
+                    ctx.strokeStyle = '#cbd5e1';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                });
+
+                // 绘制节点
+                const currentStep = allSteps[currentStepIndex];
+                const selectedSet = new Set(currentStep.selectedNodes || []);
+                const newSet = new Set(currentStep.newNodes || []);
+                const sortedNodes = [...allNodes].sort((a, b) => (newSet.has(a) ? 1 : 0) - (newSet.has(b) ? 1 : 0));
+                sortedNodes.forEach(node => {
+                    const pos = positions.get(node);
+                    if (!pos) return;
+                    const radius = getNodeRadius(node);
+                    const isSelected = selectedSet.has(node);
+                    const isNew = newSet.has(node);
+                    const isLeaf = node.isLeaf();
+                    let baseColor = isSelected ? '#fbbf24' : isNew ? '#34d399' : isLeaf ? '#60a5fa' : '#a78bfa';
+                    const gradient = ctx.createRadialGradient(pos.x - radius * 0.3, pos.y - radius * 0.3, radius * 0.1,
+                        pos.x, pos.y, radius);
+                    gradient.addColorStop(0, '#ffffff');
+                    gradient.addColorStop(0.3, baseColor);
+                    gradient.addColorStop(1, baseColor);
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+                    ctx.fillStyle = gradient;
+                    ctx.shadowColor = isSelected ? '#fbbf24' : isNew ? '#34d399' : 'rgba(0,0,0,0.08)';
+                    ctx.shadowBlur = isSelected || isNew ? 12 : 6;
+                    ctx.fill();
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.strokeStyle = isSelected ? '#d97706' : isNew ? '#059669' : 'rgba(0,0,0,0.15)';
+                    ctx.lineWidth = isSelected || isNew ? 2.5 : 1.6;
+                    ctx.stroke();
+                    const fontSize = Math.max(10, radius * 0.5);
+                    ctx.fillStyle = '#1e293b';
+                    ctx.font = `bold ${fontSize}px "Inter","PingFang SC","Microsoft YaHei",sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    let label = node.char ? `"${node.char}"` : `${node.weight}`;
+                    ctx.fillText(label, pos.x, pos.y - radius * 0.1);
+                    ctx.fillStyle = '#475569';
+                    ctx.font = `${Math.max(8, radius*0.38)}px "Inter","PingFang SC",sans-serif`;
+                    ctx.fillText(`(${node.weight})`, pos.x, pos.y + radius * 0.55);
+                });
+                ctx.restore();
+            }
+
+            function renderRightAnimation(forest, offsetX, offsetY, regionWidth, regionHeight, timestamp, step) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(offsetX, offsetY, regionWidth, regionHeight);
+                ctx.clip();
+
+                const currentStep = allSteps[currentStepIndex];
+                const selectedSet = new Set(currentStep.selectedNodes || []);
+                const newSet = new Set(currentStep.newNodes || []);
+
+                const fromF = isRightAnimating ? animationFromForest : forest;
+                const toF = forest;
+                const progress = isRightAnimating ? animationProgress : 1.0;
+
+                const itemWidth = 64;
+                const itemHeight = 48;
+                const gap = 14;
+                const startY = regionHeight * 0.35;
+                const totalWidth = toF.length * (itemWidth + gap) - gap;
+                const startX = offsetX + (regionWidth - totalWidth) / 2;
+
+                function getIndexInList(list, node) {
+                    return list.findIndex(n => n.id === node.id);
+                }
+
+                const nodePositions = new Map();
+                toF.forEach((node, idx) => {
+                    const targetX = startX + idx * (itemWidth + gap);
+                    const targetY = startY;
+                    if (!isRightAnimating || progress >= 1.0) {
+                        nodePositions.set(node, { x: targetX, y: targetY });
+                        return;
+                    }
+                    const fromIdx = getIndexInList(fromF, node);
+                    if (fromIdx !== -1) {
+                        const fromTotalWidth = fromF.length * (itemWidth + gap) - gap;
+                        const fromStartX = offsetX + (regionWidth - fromTotalWidth) / 2;
+                        const fromX = fromStartX + fromIdx * (itemWidth + gap);
+                        const fromY = startY;
+                        const x = fromX + (targetX - fromX) * easeOutCubic(progress);
+                        const y = fromY + (targetY - fromY) * easeOutCubic(progress);
+                        nodePositions.set(node, { x, y });
+                    } else {
+                        const centerX = offsetX + regionWidth / 2;
+                        const centerY = startY - 60;
+                        if (progress < 0.5) {
+                            nodePositions.set(node, { x: centerX, y: centerY, hidden: progress < 0.4 });
+                        } else {
+                            const p = (progress - 0.5) / 0.5;
+                            const x = centerX + (targetX - centerX) * easeOutBack(p);
+                            const y = centerY + (targetY - centerY) * easeOutBack(p);
+                            nodePositions.set(node, { x, y });
+                        }
+                    }
+                });
+
+                const removedNodes = fromF.filter(n => getIndexInList(toF, n) === -1);
+                removedNodes.forEach(node => {
+                    const fromIdx = getIndexInList(fromF, node);
+                    if (fromIdx === -1) return;
+                    const fromTotalWidth = fromF.length * (itemWidth + gap) - gap;
+                    const fromStartX = offsetX + (regionWidth - fromTotalWidth) / 2;
+                    const fromX = fromStartX + fromIdx * (itemWidth + gap);
+                    const fromY = startY;
+                    const centerX = offsetX + regionWidth / 2;
+                    const centerY = startY - 60;
+                    if (progress < 0.5) {
+                        const p = progress / 0.5;
+                        nodePositions.set(node, { x: fromX + (centerX - fromX) * p, y: fromY + (centerY - fromY) * p,
+                            alpha: 1 - p });
+                    } else {
+                        nodePositions.set(node, { x: centerX, y: centerY, alpha: 0, hidden: true });
+                    }
+                });
+
+                nodePositions.forEach((pos, node) => {
+                    if (pos.hidden) return;
+                    const alpha = pos.alpha !== undefined ? pos.alpha : 1;
+                    if (alpha <= 0.02) return;
+                    const isSelected = selectedSet.has(node);
+                    const isNew = newSet.has(node);
+                    const isLeaf = node.isLeaf();
+                    let fillColor = isSelected ? '#fef3c7' : isNew ? '#d1fae5' : isLeaf ? '#dbeafe' : '#ede9fe';
+                    let borderColor = isSelected ? '#f59e0b' : isNew ? '#10b981' : isLeaf ? '#3b82f6' : '#8b5cf6';
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.shadowColor = isSelected ? '#fbbf24' : isNew ? '#34d399' : 'rgba(0,0,0,0.05)';
+                    ctx.shadowBlur = isSelected || isNew ? 14 : 4;
+                    ctx.fillStyle = fillColor;
+                    ctx.strokeStyle = borderColor;
+                    ctx.lineWidth = isSelected || isNew ? 3 : 1.8;
+                    ctx.beginPath();
+                    ctx.roundRect(pos.x, pos.y - itemHeight / 2, itemWidth, itemHeight, 10);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#1e293b';
+                    ctx.font = 'bold 15px "Inter","PingFang SC",sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    let label = node.char ? `"${node.char}"` : `${node.weight}`;
+                    ctx.fillText(label, pos.x + itemWidth / 2, pos.y - 2);
+                    ctx.font = '11px "Inter","PingFang SC",sans-serif';
+                    ctx.fillStyle = '#475569';
+                    ctx.fillText(`(${node.weight})`, pos.x + itemWidth / 2, pos.y + 16);
+                    ctx.restore();
+                });
+
+                if (isRightAnimating && progress >= 0.35 && progress <= 0.65) {
+                    const centerX = offsetX + regionWidth / 2;
+                    const centerY = startY - 60;
+                    if (particles.length === 0 && progress > 0.4 && progress < 0.6) {
+                        spawnParticles(centerX, centerY, 35, ['#fbbf24', '#f59e0b', '#34d399', '#60a5fa', '#a78bfa',
+                            '#f472b6'
+                        ]);
+                    }
+                }
+
+                // 显示详细WPL计算过程（最后一步）
+                if (currentStepIndex === allSteps.length - 1 && allSteps.length > 1) {
+                    const root = allSteps[currentStepIndex].afterForest[0];
+                    if (root && allSteps[currentStepIndex].afterForest.length === 1) {
+                        const { total, details } = computeWPL(root);
+                        details.sort((a, b) => (a.char || '').localeCompare(b.char || ''));
+                        const lineHeight = 16;
+                        const boxPadding = 14;
+                        const titleHeight = 22;
+                        const requiredHeight = details.length * lineHeight + titleHeight + boxPadding * 2 + 10;
+                        const maxAvailableHeight = regionHeight * 0.45;
+                        let actualLineHeight = lineHeight;
+                        let fontSize = 11;
+                        if (requiredHeight > maxAvailableHeight) {
+                            const scale = maxAvailableHeight / requiredHeight;
+                            actualLineHeight = Math.max(11, lineHeight * scale);
+                            fontSize = Math.max(9, 11 * scale);
+                        }
+                        const boxY = regionHeight - 20 - (details.length * actualLineHeight + titleHeight + boxPadding *
+                            2);
+                        const boxX = offsetX + 10;
+                        const boxWidth = regionWidth - 20;
+                        ctx.fillStyle = 'rgba(255,255,255,0.96)';
+                        ctx.shadowColor = 'rgba(0,0,0,0.08)';
+                        ctx.shadowBlur = 12;
+                        ctx.beginPath();
+                        ctx.roundRect(boxX, boxY, boxWidth, details.length * actualLineHeight + titleHeight + boxPadding *
+                            2, 8);
+                        ctx.fill();
+                        ctx.shadowColor = 'transparent';
+                        ctx.shadowBlur = 0;
+                        ctx.strokeStyle = '#e2e8f0';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                        ctx.fillStyle = '#1e293b';
+                        ctx.font = `bold ${fontSize+1}px "Inter","PingFang SC",sans-serif`;
+                        ctx.textAlign = 'center';
+                        ctx.fillText('📐 WPL 计算过程', boxX + boxWidth / 2, boxY + boxPadding + titleHeight / 2);
+                        ctx.font = `${fontSize}px "Inter","PingFang SC",sans-serif`;
+                        ctx.textAlign = 'left';
+                        details.forEach((d, i) => {
+                            const line = `${d.char ? `"${d.char}" ` : ''}${d.weight} × ${d.depth} = ${d.product}`;
+                            ctx.fillText(line, boxX + boxPadding, boxY + boxPadding + titleHeight + i *
+                                actualLineHeight + actualLineHeight * 0.8);
+                        });
+                        ctx.fillStyle = '#0f172a';
+                        ctx.font = `bold ${fontSize+1}px "Inter","PingFang SC",sans-serif`;
+                        ctx.textAlign = 'center';
+                        const resultY = boxY + boxPadding + titleHeight + details.length * actualLineHeight + 10;
+                        ctx.fillText(`✅ WPL = ${total}`, boxX + boxWidth / 2, resultY);
+                    }
+                }
+                ctx.restore();
+            }
+
+            function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+            function easeOutBack(t) { const c1 = 1.70158; const c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(
+                    t - 1, 2); }
+
+            function startRightAnimation(targetStepIndex) {
+                if (isRightAnimating) return;
+                if (targetStepIndex < 0 || targetStepIndex >= allSteps.length) return;
+                const fromForest = allSteps[currentStepIndex].afterForest;
+                const toForest = allSteps[targetStepIndex].afterForest;
+                animationFromForest = fromForest;
+                animationToForest = toForest;
+                animationTargetStep = targetStepIndex;
+                animationProgress = 0;
+                animationStartTime = performance.now();
+                isRightAnimating = true;
+                particles = [];
+                setButtonsEnabled(false);
+            }
+
+            function finishAnimation() {
+                if (!isRightAnimating) return;
+                isRightAnimating = false;
+                animationProgress = 1;
+                if (animationTargetStep >= 0) {
+                    currentStepIndex = animationTargetStep;
+                    animationTargetStep = -1;
+                }
+                animationFromForest = null;
+                animationToForest = null;
+                updateUI();
+                setButtonsEnabled(true);
+                particles = [];
+                if (isAutoPlaying && currentStepIndex < allSteps.length - 1) {
+                    scheduleAutoNext();
+                }
+            }
+
+            function setButtonsEnabled(enabled) {
+                btnPrev.disabled = !enabled || currentStepIndex <= 0;
+                btnNext.disabled = !enabled || (currentStepIndex >= allSteps.length - 1 && !isRightAnimating);
+                btnAuto.disabled = !enabled;
+            }
+
+            function updateUI() {
+                if (allSteps.length === 0) {
+                    stepIndicator.textContent = '步骤 0/0';
+                    stepDesc.textContent = '👆 输入数据并点击“解析”开始';
+                    btnPrev.disabled = true;
+                    btnNext.disabled = true;
+                    btnAuto.disabled = true;
+                    return;
+                }
+                const total = allSteps.length;
+                stepIndicator.textContent = `步骤 ${currentStepIndex}/${total - 1}`;
+                stepDesc.textContent = allSteps[currentStepIndex].description;
+                btnPrev.disabled = isRightAnimating || currentStepIndex <= 0;
+                btnNext.disabled = isRightAnimating || currentStepIndex >= total - 1;
+                btnAuto.disabled = isRightAnimating || total <= 1;
+            }
+
+            function goToStep(targetIdx) {
+                if (allSteps.length === 0) return;
+                if (isRightAnimating) return;
+                const clamped = Math.max(0, Math.min(targetIdx, allSteps.length - 1));
+                if (clamped === currentStepIndex) return;
+                if (clamped > currentStepIndex) {
+                    startRightAnimation(clamped);
+                } else {
+                    currentStepIndex = clamped;
+                    updateUI();
+                }
+            }
+
+            function stepNext() {
+                if (isRightAnimating) return;
+                if (currentStepIndex < allSteps.length - 1) goToStep(currentStepIndex + 1);
+            }
+
+            function stepPrev() {
+                if (isRightAnimating) return;
+                if (currentStepIndex > 0) goToStep(currentStepIndex - 1);
+            }
+
+            function resetToStart() {
+                stopAutoPlay();
+                if (isRightAnimating) {
+                    isRightAnimating = false;
+                    animationProgress = 1;
+                    particles = [];
+                }
+                goToStep(0);
+            }
+
+            function startAutoPlay() {
+                if (isAutoPlaying || allSteps.length === 0) return;
+                if (currentStepIndex >= allSteps.length - 1) goToStep(0);
+                isAutoPlaying = true;
+                btnAuto.textContent = '⏸ 停止';
+                btnAuto.classList.add('playing');
+                if (!isRightAnimating && currentStepIndex < allSteps.length - 1) {
+                    startRightAnimation(currentStepIndex + 1);
+                }
+            }
+
+            function stopAutoPlay() {
+                isAutoPlaying = false;
+                btnAuto.textContent = '▶ 自动播放';
+                btnAuto.classList.remove('playing');
+                if (autoPlayTimer) {
+                    clearTimeout(autoPlayTimer);
+                    autoPlayTimer = null;
+                }
+            }
+
+            function toggleAutoPlay() {
+                if (isAutoPlaying) stopAutoPlay();
+                else startAutoPlay();
+            }
+
+            function scheduleAutoNext() {
+                if (!isAutoPlaying || isRightAnimating) return;
+                autoPlayTimer = setTimeout(() => {
+                    if (!isAutoPlaying) return;
+                    if (currentStepIndex < allSteps.length - 1) {
+                        startRightAnimation(currentStepIndex + 1);
+                    } else {
+                        stopAutoPlay();
+                    }
+                }, 600);
+            }
+
+            function renderLoop(timestamp) {
+                if (!renderFrameId) return;
+                if (isRightAnimating) {
+                    const elapsed = timestamp - animationStartTime;
+                    animationProgress = Math.min(1, elapsed / ANIMATION_DURATION);
+                    if (animationProgress >= 1) finishAnimation();
+                }
+                renderAll(timestamp);
+                renderFrameId = requestAnimationFrame(renderLoop);
+            }
+
+            function startRenderLoop() {
+                if (renderFrameId) return;
+                lastFrameTime = performance.now();
+                renderFrameId = requestAnimationFrame(renderLoop);
+            }
+
+            function stopRenderLoop() {
+                if (renderFrameId) {
+                    cancelAnimationFrame(renderFrameId);
+                    renderFrameId = null;
+                }
+                if (allSteps.length > 0) renderAll(performance.now());
+            }
+
+            function loadData(rawInput) {
+                stopAutoPlay();
+                if (isRightAnimating) {
+                    isRightAnimating = false;
+                    particles = [];
+                }
+                try {
+                    const entries = parseInput(rawInput);
+                    allSteps = buildHuffmanSteps(entries);
+                    currentStepIndex = 0;
+                    updateUI();
+                    startRenderLoop();
+                    showToast(`✅ 解析成功！${entries.length}个节点，${allSteps.length-1}次合并`, 2000);
+                } catch (err) {
+                    allSteps = [];
+                    currentStepIndex = 0;
+                    updateUI();
+                    stopRenderLoop();
+                    const rect = canvas.getBoundingClientRect();
+                    const dpr = window.devicePixelRatio || 1;
+                    const h = Math.max(rect.height, 460);
+                    canvas.width = rect.width * dpr;
+                    canvas.height = h * dpr;
+                    canvas.style.width = rect.width + 'px';
+                    canvas.style.height = h + 'px';
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    ctx.scale(dpr, dpr);
+                    ctx.clearRect(0, 0, rect.width, h);
+                    ctx.fillStyle = '#fdfdfd';
+                    ctx.fillRect(0, 0, rect.width, h);
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '15px "Inter","PingFang SC",sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('⚠ ' + err.message, rect.width / 2, h / 2);
+                    showToast('❌ ' + err.message, 3000);
+                }
+            }
+
+            btnParse.addEventListener('click', () => loadData(inputEl.value.trim()));
+            inputEl.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault();
+                    loadData(inputEl.value.trim()); }
+            });
+            btnReset.addEventListener('click', () => {
+                if (allSteps.length === 0) loadData(inputEl.value.trim());
+                else resetToStart();
+            });
+            btnPrev.addEventListener('click', stepPrev);
+            btnNext.addEventListener('click', stepNext);
+            btnAuto.addEventListener('click', toggleAutoPlay);
+            canvas.addEventListener('click', () => {
+                if (!isRightAnimating && allSteps.length > 0 && currentStepIndex < allSteps.length - 1) stepNext();
+            });
+            document.addEventListener('keydown', e => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault();
+                    stepNext(); } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault();
+                    stepPrev(); } else if (e.key === 'r' || e.key === 'R') { e.preventDefault();
+                    resetToStart(); } else if (e.key === ' ') { e.preventDefault();
+                    toggleAutoPlay(); }
+            });
+            window.addEventListener('resize', () => {
+                if (allSteps.length > 0 && !renderFrameId) renderAll(performance.now());
+            });
+
+            function init() {
+                const defaultInput = inputEl.value.trim();
+                if (defaultInput) {
+                    loadData(defaultInput);
+                } else {
+                    const rect = canvas.getBoundingClientRect();
+                    const dpr = window.devicePixelRatio || 1;
+                    const h = Math.max(rect.height, 460);
+                    canvas.width = rect.width * dpr;
+                    canvas.height = h * dpr;
+                    canvas.style.width = rect.width + 'px';
+                    canvas.style.height = h + 'px';
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    ctx.scale(dpr, dpr);
+                    ctx.fillStyle = '#fdfdfd';
+                    ctx.fillRect(0, 0, rect.width, h);
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '15px "Inter","PingFang SC",sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('👆 请输入字符和频率，点击“解析”', rect.width / 2, h / 2);
+                }
+            }
+            init();
+        })();
+    </script>
+</body>
+</html>
